@@ -55,7 +55,7 @@ export default function App() {
       {error && <div style={{color:"#b00020", marginTop:12}}>{error}</div>}
 
       {result && (
-        <div style={{marginTop:20, padding:14, borderRadius:8, background:"#f7f7fb", boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{marginTop:20, padding:14, borderRadius:8, background:"#f7f7fb", boxShadow:"0 1px 3px rgba(0,0,0,0.06)", color: "#242424"}}>
           <div><strong>URL:</strong> {result.url}</div>
           <div><strong>Label:</strong> <span style={{textTransform:"uppercase"}}>{result.label}</span></div>
           <div><strong>Probability:</strong> {(result.probability*100).toFixed(2)}%</div>
