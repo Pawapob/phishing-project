@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Phishing URL Check</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin:30px; }
+    input[type=text]{ width:70%; padding:8px; }
+    button{ padding:8px 12px; }
+    #result{ margin-top:20px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <h2>Phishing URL Check</h2>
+  <input id="input-url" type="text" placeholder="https://example.com" />
+  <button onclick="checkUrl()">Check</button>
+
+  <div id="result"></div>
+
+  <script>
+    async function checkUrl() {
+      const url = document.getElementById("input-url").value.trim();
+      if (!url) { alert("กรอก URL ก่อน"); return; }
+
+      const api = "/predict"; // local same origin
+      try {
+        // ส่งแบบ JSON body (app.py รองรับ)
+        const res = await fetch(api, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // "x-api-key": "changeme"  // ถ้าใช้ API key ให้เปิดบรรทัดนี้
+          },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById("result").innerText = "ข้อผิดพลาด: " + (data.detail || JSON.stringify(data));
+          return;
+        }
+        document.getElementById("result").innerText =
+          `ผล: ${data.label.toUpperCase()}  —  ความน่าจะเป็น: ${(data.probability*100).toFixed(2)}%`;
+      } catch (err) {
+        console.error(err);
+        document.getElementById("result").innerText = "เกิดข้อผิดพลาด ดู console";
+      }
+    }
+  </script>
+</body>
+</html>
