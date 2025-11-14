@@ -12,7 +12,7 @@ from features import create_features_from_url
 # ---------------- config ----------------
 # อ่านค่า environment (ตั้งค่า .env หรือ export ก่อนรัน)
 API_KEY = os.getenv("API_KEY", "")             # ถ้าว่าง = ไม่มีการตรวจ API key
-PHISH_THRESHOLD = float(os.getenv("PHISH_THRESHOLD", 0.80))
+PHISH_THRESHOLD = float(os.getenv("PHISH_THRESHOLD", 0.60))
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")  # คั่นด้วยคอมม่า ถ้าไม่ต้องการ "*"
 
 # ---------------- init ----------------
