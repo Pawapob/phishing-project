@@ -2,8 +2,8 @@
 import { useState } from "react";
 import "./App.css";
 
-// ใช้ Environment Variable หรือ Default ไปที่ localhost (ผ่าน vite proxy)
-const API_URL = import.meta.env.VITE_API_URL || "/predict";
+// ใช้ Path นี้เพื่อเลี่ยงปัญหา import.meta ในบาง environment
+const API_URL = "/predict";
 
 export default function App() {
   const [url, setUrl] = useState("");
@@ -76,7 +76,15 @@ export default function App() {
 
         {/* ส่วนแสดง Error */}
         {error && (
-          <div style={{color: "#ef4444", marginTop: "1.5rem", fontWeight: 500, background:"rgba(239,68,68,0.1)", padding:"10px", borderRadius:"8px"}}>
+          <div style={{
+            color: "#fca5a5", 
+            marginTop: "1.5rem", 
+            fontWeight: 500, 
+            background: "rgba(127, 29, 29, 0.4)", 
+            padding: "16px", 
+            borderRadius: "12px",
+            border: "1px solid rgba(248, 113, 113, 0.2)"
+          }}>
             {error}
           </div>
         )}
@@ -85,29 +93,34 @@ export default function App() {
         {result && (
           <div className={`result-card ${isPhishing ? "phishing" : "legit"}`}>
             
-            <div className="status-badge">
-              {isPhishing ? "⚠️ DETECTED PHISHING" : "SAFE TO VISIT"}
+            <div style={{textAlign: "center"}}>
+                <div className="status-badge">
+                {isPhishing ? "DETECTED PHISHING" : "SAFE TO VISIT"}
+                </div>
             </div>
 
             <div className="result-details">
               <div>
-                <strong>URL:</strong> <span style={{wordBreak: "break-all"}}>{result.url}</span>
+                <strong>URL:</strong> <span style={{wordBreak: "break-all", color: "#e6edf3"}}>{result.url}</span>
               </div>
               
               <div>
                 <strong>ความเสี่ยง (Confidence Score):</strong> 
-                <span style={{ marginLeft: "8px", fontSize: "1.2em", color: isPhishing ? "#ef4444" : "#10b981" }}>
+                <span style={{ marginLeft: "8px", fontSize: "1.2em", color: isPhishing ? "#fca5a5" : "#6ee7b7" }}>
                   {probPercent}%
                 </span>
               </div>
 
               <div>
-                <strong>AI Analysis:</strong> {isPhishing 
-                  ? "ระบบตรวจพบความผิดปกติที่ตรงกับพฤติกรรมของเว็บหลอกลวง" 
-                  : "โครงสร้าง URL ดูปลอดภัยและอยู่ในเกณฑ์ที่ยอมรับได้"}
+                <strong>AI Analysis:</strong> 
+                <span style={{color: "#c9d1d9"}}>
+                    {isPhishing 
+                    ? "ระบบตรวจพบความผิดปกติที่ตรงกับพฤติกรรมของเว็บหลอกลวง" 
+                    : "โครงสร้าง URL ดูปลอดภัยและอยู่ในเกณฑ์ที่ยอมรับได้"}
+                </span>
               </div>
 
-              <div style={{fontSize: "0.8em", opacity: 0.6, marginTop: "10px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "10px"}}>
+              <div style={{fontSize: "0.8em", opacity: 0.6, marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "12px", textAlign: "left"}}>
                  Model: XGBoost & TF-IDF (Calibrated) | Threshold: {result.threshold || 0.6}
               </div>
             </div>
@@ -116,7 +129,7 @@ export default function App() {
 
       </div>
       
-      <p style={{textAlign:"center", color: "#64748b", fontSize: "0.8rem", marginTop: "2rem"}}>
+      <p style={{textAlign:"center", color: "#8b949e", fontSize: "0.85rem", marginTop: "32px", opacity: 0.8}}>
         Developed by Pawapob • CS 461 Neural Networks and Deep Learning Final Project
       </p>
     </div>
