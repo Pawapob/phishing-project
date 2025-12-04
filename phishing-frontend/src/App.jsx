@@ -39,7 +39,7 @@ export default function App() {
 
   return (
     <div style={{maxWidth:800, margin:"40px auto", fontFamily: "Inter, Arial, sans-serif", padding:20}}>
-      <h1 style={{marginBottom:8}}>🔎 Phishing URL Checker</h1>
+      <h1 style={{marginBottom:8}}> Phishing URL Checker</h1>
       <form onSubmit={handleCheck} style={{display:"flex", gap:8}}>
         <input
           value={url}
@@ -64,8 +64,7 @@ export default function App() {
       )}
 
       <div style={{marginTop:30, fontSize:13, color:"#666"}}>
-        Dev tip: ถ้า backend อยู่เครื่องเดียวกับมึง เทสด้วย `npm run dev` (vite proxy จะไปที่ localhost:8000) <br/>
-        ถ้า backend โผล่เป็น public (ngrok / deployed) ให้ตั้งค่า VITE_API_URL ใน `.env`.
+        Prototype
       </div>
     </div>
   );

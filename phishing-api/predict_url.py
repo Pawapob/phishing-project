@@ -1,49 +1,129 @@
-# predict_url.py
+# predict_url.py (safe dual-mode: v1 pipeline + legacy fallback)
 import joblib
 import hashlib
 import pandas as pd
 import os
-from features import create_features_from_url   # ต้องมีไฟล์ features.py ในโฟลเดอร์เดียวกัน
+from urllib.parse import urlparse
+from scipy.sparse import csr_matrix, hstack
+from features import create_features_from_url
 
-# --- helper: md5 check (เช็คว่าไฟล์โมเดลที่ใช้ตรงกับที่มึงคิด) ---
+# ---------------- helper ----------------
 def md5(path):
+    if not os.path.exists(path):
+        return "FILE NOT FOUND"
     with open(path,'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
-print("Model file md5:", md5("model/rf_phishing_model.pkl"))
-print("Feature columns file md5:", md5("model/feature_columns.pkl"))
+# ---------------- model paths ----------------
+# v1 artifacts
+MODEL_V1_PATH = "model/phishing_model_v1.pkl"
+TFIDF_V1_PATH = "model/phishing_tfidf_v1.pkl"
+SCALER_V1_PATH = "model/phishing_scaler_v1.pkl"
+FEATURES_NUM_V1_PATH = "model/phishing_num_features_v1.pkl"
 
-# --- โหลดโมเดล + feature list (ต้องมาจากไฟล์เดียวกับ Colab) ---
-model = joblib.load("model/rf_phishing_model.pkl")
-feature_cols = joblib.load("model/feature_columns.pkl")
-print("จำนวน feature ที่โมเดลต้องการ:", len(feature_cols))
+# legacy model
+LEGACY_MODEL_PATH = "model/rf_phishing_model.pkl"
+LEGACY_FEATURES_PATH = "model/feature_columns.pkl"
 
-# --- debug: แสดง 20 ฟีเจอร์แรกของ feature_cols ---
-print("feature_cols[:20]:", feature_cols[:20])
+# ---------------- auto-load logic ----------------
+use_v1 = False
+model = None
+tfidf = None
+scaler = None
+numeric_features = None
+feature_cols = None
 
-# --- ฟังก์ชัน predict ตามที่มึงต้องการ ---
+print("Checking model files...")
+print("Model v1 MD5:", md5(MODEL_V1_PATH))
+print("Legacy model MD5:", md5(LEGACY_MODEL_PATH))
+
+# Try v1 first
+if (
+    os.path.exists(MODEL_V1_PATH)
+    and os.path.exists(TFIDF_V1_PATH)
+    and os.path.exists(SCALER_V1_PATH)
+    and os.path.exists(FEATURES_NUM_V1_PATH)
+):
+    try:
+        model = joblib.load(MODEL_V1_PATH)
+        tfidf = joblib.load(TFIDF_V1_PATH)
+        scaler = joblib.load(SCALER_V1_PATH)
+        numeric_features = joblib.load(FEATURES_NUM_V1_PATH)
+        use_v1 = True
+        print("Loaded Model v1 (numeric + tfidf pipeline)")
+        print("Numeric feature count:", len(numeric_features))
+    except Exception as e:
+        print("Failed loading v1:", e)
+        print("Falling back to legacy model...")
+        use_v1 = False
+
+# If v1 not loaded → fallback to legacy
+if not use_v1:
+    model = joblib.load(LEGACY_MODEL_PATH)
+    feature_cols = joblib.load(LEGACY_FEATURES_PATH)
+    print("Loaded legacy RandomForest model")
+    print("Legacy feature count:", len(feature_cols))
+
+print("Mode:", "v1" if use_v1 else "legacy")
+print("--------------------------------------")
+
+# ---------------- predict function ----------------
 def predict_url(url, threshold=0.6, show_features=False):
-    # สร้าง DataFrame ฟีเจอร์จาก URL (ต้องคืน DataFrame shape (1, len(feature_cols)))
-    X = create_features_from_url(url, feature_cols)
+    if use_v1:
+        # ------------ V1 pipeline (numeric + scaled + tfidf) ------------
+        # numeric features
+        X_num_df = create_features_from_url(url, numeric_features)
 
-    # sanity checks
-    if X.shape[1] != len(feature_cols):
-        raise ValueError(f"Feature mismatch: X has {X.shape[1]} cols but model expects {len(feature_cols)}")
+        if X_num_df.shape[1] != len(numeric_features):
+            raise ValueError(
+                f"Numeric feature mismatch (v1): DF has {X_num_df.shape[1]}, expected {len(numeric_features)}"
+            )
 
-    # debug: ถ้าขอแสดงให้เห็นรายละเอียดฟีเจอร์
-    if show_features:
-        pd.set_option('display.max_rows', 999)
-        print("=== feature vector (name : value) ===")
-        print(X.T)
+        # scale numeric
+        X_num = scaler.transform(X_num_df.fillna(0))
+        X_num_sp = csr_matrix(X_num)
 
-    prob = model.predict_proba(X)[0][1]
-    label = int(prob > threshold)
+        # tfidf
+        p = urlparse(url)
+        text = (p.path or "") + "?" + (p.query or "")
+        X_tfidf = tfidf.transform([text])
 
-    print(url)
-    print("prob:", f"{prob*100:.2f}%", "=>", "Phishing" if label else "Legit")
-    return prob, label
+        # combined
+        X = hstack([X_num_sp, X_tfidf])
 
-# --- ตัวอย่างการรัน (เปลี่ยน threshold ถ้าต้องการ) ---
+        prob = model.predict_proba(X)[0][1]
+        label = int(prob > threshold)
+
+        if show_features:
+            pd.set_option("display.max_rows", 999)
+            print("\n=== numeric features (v1) ===")
+            print(X_num_df.T)
+
+        print(url)
+        print("prob:", f"{prob*100:.2f}%", "=>", "Phishing" if label else "Legit")
+        return prob, label
+
+    else:
+        # ------------ Legacy pipeline ------------
+        X = create_features_from_url(url, feature_cols)
+
+        if X.shape[1] != len(feature_cols):
+            raise ValueError(
+                f"Legacy feature mismatch: DF cols={X.shape[1]}, expected={len(feature_cols)}"
+            )
+
+        if show_features:
+            pd.set_option("display.max_rows", 999)
+            print("=== legacy feature vector ===")
+            print(X.T)
+
+        prob = model.predict_proba(X)[0][1]
+        label = int(prob > threshold)
+
+        print(url)
+        print("prob:", f"{prob*100:.2f}%", "=>", "Phishing" if label else "Legit")
+        return prob, label
+
+# ---------------- example run ----------------
 if __name__ == "__main__":
-    # ถ้าต้องการดูฟีเจอร์ ให้ใส่ show_features=True
     predict_url("https://www.youtube.com/", threshold=0.6, show_features=False)

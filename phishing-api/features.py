@@ -1,54 +1,77 @@
+# features.py
 import re
+import math
 from urllib.parse import urlparse
 import tldextract
 import pandas as pd
 
-def create_features_from_url(url, feature_cols):
-    feats = {col: 0 for col in feature_cols}
+# 1. คำเสี่ยงที่ Hacker ชอบใช้ (ต้องตรงกับตอนเทรน)
+SENSITIVE_TOKENS = [
+    'login', 'secure', 'update', 'verify', 'account', 'signin', 'wp-login', 'confirm',
+    'banking', 'paypal', 'limited', 'suspend', 'client', 'payment', 'bill', 'invoice',
+    'admin', 'service', 'bonus', 'free', 'gift', 'netflix', 'apple', 'google', 'hotmail',
+    'yahoo', 'support', 'protect', 'secure', 'safe'
+]
+
+# 2. นามสกุลโดเมนเสี่ยง
+RISKY_TLDS = {'xyz', 'top', 'club', 'online', 'vip', 'tk', 'ml', 'ga', 'cf', 'gq', 'men', 'loan', 'date', 'win', 'cn', 'ru'}
+
+def shannon_entropy(s: str) -> float:
+    if not s: return 0.0
+    freq = {}
+    for c in s: freq[c] = freq.get(c, 0) + 1
+    L = len(s)
+    return -sum((f/L) * math.log2(f/L) for f in freq.values())
+
+def is_shortened(url: str) -> int:
+    shorteners = r"bit\.ly|goo\.gl|shorte\.st|go2l\.ink|x\.co|ow\.ly|t\.co|tinyurl|tr\.im|is\.gd|cli\.gs|" \
+                 r"yfrog\.com|migre\.me|ff\.im|tiny\.cc|url4\.eu|twit\.ac|su\.pr|twurl\.nl|snipurl\.com|" \
+                 r"short\.to|BudURL\.com|ping\.fm|post\.ly|Just\.as|bkite\.com|snipr\.com|fic\.kr|loopt\.us|" \
+                 r"doiop\.com|short\.ie|kl\.am|wp\.me|rubyurl\.com|om\.ly|to\.ly|bit\.do|t\.co|lnkd\.in|db\.tt|" \
+                 r"qr\.ae|adf\.ly|goo\.gl|bitly\.com|cur\.lv|tinyurl\.com|ow\.ly|bit\.ly|ity\.im|q\.gs|is\.gd|" \
+                 r"po\.st|bc\.vc|twitthis\.com|u\.to|j\.mp|buzurl\.com|cutt\.us|u\.bb|yourls\.org|x\.co"
+    return int(bool(re.search(shorteners, url, flags=re.IGNORECASE)))
+
+def extract_basic_features(url: str) -> dict:
     parsed = urlparse(url)
-    host = parsed.netloc.lower() or parsed.path.lower()
+    host = (parsed.netloc or parsed.path or "").lower()
     ext = tldextract.extract(host)
-    domain = ext.domain + "." + ext.suffix if ext.suffix else ext.domain
+    path = parsed.path or ''
+    
+    feats = {}
+    # --- Basic Stats ---
+    feats['url_length'] = len(url)
+    feats['hostname_length'] = len(host)
+    feats['num_dots'] = host.count('.')
+    feats['num_hyphens'] = host.count('-')
+    feats['num_slash'] = url.count('/')
+    feats['num_query'] = url.count('?') + url.count('&')
+    feats['num_digits'] = sum(c.isdigit() for c in url)
+    
+    # --- Advanced Features ---
+    feats['has_ip'] = int(bool(re.match(r'^\d+\.\d+\.\d+\.\d+$', host)))
+    feats['no_https'] = int(not url.lower().startswith('https'))
+    feats['is_shortened'] = is_shortened(url)
+    feats['has_punycode'] = 1 if "xn--" in host else 0
+    feats['is_risky_tld'] = 1 if ext.suffix in RISKY_TLDS else 0
+    
+    # --- Entropy & Structure ---
+    feats['entropy_host'] = shannon_entropy(host)
+    feats['entropy_path'] = shannon_entropy(path)
+    
+    # Subdomain levels
+    feats['subdomain_levels'] = len([d for d in ext.subdomain.split('.') if d]) if ext.subdomain else 0
+    
+    # Sensitive tokens count
+    feats['num_sensitive_tokens'] = sum(int(t in url.lower()) for t in SENSITIVE_TOKENS)
+    
+    return feats
 
-    simple = {
-        "UrlLength": len(url),
-        "length_url": len(url),
-        "NumDots": host.count("."),
-        "nb_dots": host.count("."),
-        "NumDash": host.count("-"),
-        "nb_hyphens": host.count("-"),
-        "nb_slash": url.count("/"),
-        "NumUnderscore": url.count("_"),
-        "NumPercent": url.count("%"),
-        "NumHash": url.count("#"),
-        "NumQueryComponents": url.count("&"),
-        "NumNumericChars": sum(c.isdigit() for c in url),
-        "IpAddress": int(bool(re.match(r'^\d+\.\d+\.\d+\.\d+$', host))),
-        "ip": int(bool(re.match(r'^\d+\.\d+\.\d+\.\d+$', host))),
-        "NoHttps": int(not url.lower().startswith("https")),
-        "https_token": int("https" in url.lower()),
-        "http_in_path": int("http" in parsed.path.lower()),
-        "HostnameLength": len(host),
-        "length_hostname": len(host),
-        "nb_subdomains": len(ext.subdomain.split(".")) if ext.subdomain else 0,
-        "SubdomainLevel": len(ext.subdomain.split(".")) if ext.subdomain else 0
-    }
-
-    for k,v in simple.items():
-        if k in feats:
-            feats[k] = v
-
-    tokens = ['login','secure','update','verify','account','signin','wp-login']
-    if "NumSensitiveWords" in feats:
-        feats["NumSensitiveWords"] = sum(int(t in url.lower()) for t in tokens)
-
-    if "prefix_suffix" in feats:
-        feats["prefix_suffix"] = int("-" in domain)
-
-    brand_list = ["google","bank","paypal","facebook","apple","youtube","bangkokbank"]
-    if "brand_in_path" in feats:
-        feats["brand_in_path"] = sum(b in parsed.path.lower() for b in brand_list)
-    if "brand_in_subdomain" in feats:
-        feats["brand_in_subdomain"] = sum(b in ext.subdomain.lower() for b in brand_list)
-
-    return pd.DataFrame([feats])
+def create_features_from_url(url: str, numeric_feature_names: list):
+    """
+    สร้าง DataFrame 1 แถวจาก url เพื่อเตรียมส่งให้ Model
+    """
+    ex = extract_basic_features(url)
+    # คืนค่าเป็น DataFrame ที่เรียงคอลัมน์ตามที่ Model ต้องการ
+    ordered_row = {k: ex.get(k, 0) for k in numeric_feature_names}
+    return pd.DataFrame([ordered_row])
