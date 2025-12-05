@@ -53,7 +53,7 @@ export default function App() {
       <div className="cyber-card">
         
         <div className="header-section">
-          <h1 className="title">Phishing URL Checker </h1>
+          <h1 className="title">Phishing URL Detection </h1>
           <p className="subtitle">ระบบตรวจสอบ Phishing URL อัจฉริยะ ด้วย Machine Learning</p>
         </div>
 
