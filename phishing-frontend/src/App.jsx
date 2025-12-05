@@ -1,8 +1,8 @@
-// src/App.jsx
+
 import { useState } from "react";
 import "./App.css";
 
-// ใช้ Path นี้เพื่อเลี่ยงปัญหา import.meta ในบาง environment
+
 const API_URL = "/predict";
 
 export default function App() {
@@ -44,7 +44,7 @@ export default function App() {
     }
   }
 
-  // ฟังก์ชันช่วยเลือกสไตล์ตามผลลัพธ์
+ 
   const isPhishing = result?.label?.toLowerCase() === "phishing";
   const probPercent = result ? (result.probability * 100).toFixed(2) : 0;
 

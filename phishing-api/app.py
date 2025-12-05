@@ -1,4 +1,3 @@
-# app.py - Final Logic with Anti-Impersonation
 import os
 import joblib
 import logging
@@ -12,38 +11,130 @@ from features import create_features_from_url
 from scipy.sparse import hstack, csr_matrix
 from urllib.parse import urlparse
 
-# ---------------- config ----------------
 API_KEY = os.getenv("API_KEY", "")
-# Threshold ค่าเดิม
+# Threshold เปลี่ยนตามใจ
 PHISH_THRESHOLD = float(os.getenv("PHISH_THRESHOLD", 0.46)) 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*")
 
 # ---------------- 1. Trusted Domains (WhiteList) ----------------
 # เว็บพวกนี้ ให้ผ่านตลอด (0.01%)
 TRUSTED_ROOTS = {
-    'google.com', 'youtube.com', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
-    'microsoft.com', 'live.com', 'office.com', 'netflix.com', 'amazon.com',
-    'shopee.co.th', 'lazada.co.th', 'scb.co.th', 'kasikornbank.com', 'bangkokbank.com',
-    'ktb.co.th', 'krungthai.com', 'wikipedia.org', 'pantip.com', 'sanook.com',
-    'ac.th', 'go.th', 'or.th'
-}
+    # --- Search & Social Media ---
+    'google.com', 'youtube.com', 'facebook.com', 'instagram.com', 
+    'twitter.com', 'x.com', 'tiktok.com', 'linkedin.com', 'pinterest.com',
+    'reddit.com', 'line.me', 'whatsapp.com', 'telegram.org', 'discord.com',
+    
+    # --- Tech & Cloud Services ---
+    'microsoft.com', 'live.com', 'office.com', 'sharepoint.com',
+    'apple.com', 'icloud.com', 'dropbox.com', 'zoom.us',
+    'github.com', 'gitlab.com', 'stackoverflow.com',
+    'adobe.com', 'canva.com', 'wetransfer.com',
+    
+    # --- Streaming & Entertainment ---
+    'netflix.com', 'spotify.com', 'twitch.tv', 'viutv.com', 'iq.com',
+    'steamcommunity.com', 'steampowered.com', 'roblox.com', 'epicgames.com',
+    'spotify.com', # เคสพิเศษที่เคยเจอ
+    
+    # --- E-Commerce & Shopping (Thai & Global) ---
+    'amazon.com', 'ebay.com', 'aliexpress.com', 'alibaba.com',
+    'shopee.co.th', 'lazada.co.th', 'kaidee.com', 'wongnai.com',
+    
+    # --- Banking & Finance (Thai) - เน้นที่ไม่ได้ลงท้ายด้วย .or.th/.go.th ---
+    'scb.co.th', 'kasikornbank.com', 'bangkokbank.com', 'krungthai.com', 'ktb.co.th',
+    'bay.co.th', 'krungsri.com', # กรุงศรี
+    'ttbbank.com', 'tmbbank.com', # TTB
+    'uob.co.th', 'cimbthai.com', 'lhbank.co.th',
+    'truemoney.com', 'paypal.com',
+    
+    # --- Logistics (ขนส่ง) ---
+    'thailandpost.co.th', 'kerryexpress.com', 'flash-express.com', 'jtexpress.co.th',
+    
+    # --- Service & Travel ---
+    'grab.com', 'foodpanda.co.th', 'lineman.line.me',
+    'agoda.com', 'booking.com', 'traveloka.com', 'trip.com',
+    'airasia.com', 'thaiairways.com',
+    
+    # --- Telecom (ค่ายมือถือ/เน็ต) ---
+    'ais.co.th', 'dtac.co.th', 'true.th', 'ntplc.co.th', '3bb.co.th',
+    
+    # --- News & Portal (Thai) ---
+    'wikipedia.org', 'pantip.com', 'sanook.com', 'kapook.com', 'mthai.com',
+    'thairath.co.th', 'dailynews.co.th', 'matichon.co.th', 'khaosod.co.th',
+    'bangkokpost.com', 'workpointtv.com', 'one31.net',
+    
+    # --- TLDs ที่เชื่อถือได้ (Government/Education/Organization) ---
+    # เนื่องจากเรามี logic เช็ค suffix ด้านล่างอยู่แล้ว (.ac.th, .go.th, .or.th)
+    # รายชื่อพวกนี้ใส่กันเหนียวไว้สำหรับโดเมนหลัก
+    'ac.th', 'go.th', 'or.th', 'mi.th'
 
 # ---------------- 2. Targeted Brands (Blacklist Logic) ----------------
 # กฎ: ถ้าเจอคำพวกนี้ใน URL แต่ Root Domain ไม่ใช่เจ้าของตัวจริง = ฟิชชิ่งแน่นอน (99.9%)
-# Format: "คำที่เจอ": "โดเมนเจ้าของตัวจริง"
+# Format: "คำที่เจอใน URL": "โดเมนเจ้าของตัวจริง"
+}
 BRAND_MAP = {
+    # --- Social & Global Tech ---
     'facebook': 'facebook.com',
     'instagram': 'instagram.com',
     'twitter': 'twitter.com',
-    'paypal': 'paypal.com',
-    'netflix': 'netflix.com',
+    'tiktok': 'tiktok.com',
+    'line': 'line.me',
+    'whatsapp': 'whatsapp.com',
+    'google': 'google.com',
+    'gmail': 'google.com',
+    'youtube': 'youtube.com',
     'microsoft': 'microsoft.com',
     'apple': 'apple.com',
     'icloud': 'icloud.com',
-    'google': 'google.com',
-    'kbank': 'kasikornbank.com',
-    'scb': 'scb.co.th',
-    'krungthai': 'krungthai.com'
+    'netflix': 'netflix.com',
+    'spotify': 'spotify.com',
+    'amazon': 'amazon.com',
+    'paypal': 'paypal.com',
+    'dropbox': 'dropbox.com',
+
+    # --- Shopping (Thai) ---
+    'shopee': 'shopee.co.th',
+    'lazada': 'lazada.co.th',
+    'kaidee': 'kaidee.com',
+
+    # --- Banking (Thai) ---
+    'kbank': 'kasikornbank.com',     # กสิกร
+    'kasikorn': 'kasikornbank.com',
+    'scb': 'scb.co.th',              # ไทยพาณิชย์
+    'siamcommercial': 'scb.co.th',
+    'ktb': 'ktb.co.th',              # กรุงไทย
+    'krungthai': 'krungthai.com',
+    'bangkokbank': 'bangkokbank.com',# กรุงเทพ
+    'bualuang': 'bangkokbank.com',
+    'krungsri': 'krungsri.com',      # กรุงศรี
+    'ttb': 'ttbbank.com',            # ทีทีบี
+    'tmb': 'tmbbank.com',
+    'uob': 'uob.co.th',              # ยูโอบี
+    'cimb': 'cimbthai.com',          # ซีไอเอ็มบี
+    'gsb': 'gsb.or.th',              # ออมสิน
+    'truemoney': 'truemoney.com',    # ทรูมันนี่
+
+    # --- Telecom (Thai) ---
+    'ais': 'ais.co.th',
+    'dtac': 'dtac.co.th',
+    'true': 'true.th',               # ทรู (ใช้โดเมนใหม่ true.th หรือ truecorp.co.th)
+    'truemove': 'true.th',
+    '3bb': '3bb.co.th',
+    'ntplc': 'ntplc.co.th',
+
+    # --- Logistics (Thai) ---
+    'thailandpost': 'thailandpost.co.th',
+    'kerry': 'kerryexpress.com',
+    'flash': 'flash-express.com',
+    'jtexpress': 'jtexpress.co.th',
+    'ninjavan': 'ninjavan.co',
+
+    # --- Service & Others ---
+    'grab': 'grab.com',
+    'foodpanda': 'foodpanda.co.th',
+    'agoda': 'agoda.com',
+    'booking': 'booking.com',
+    'traveloka': 'traveloka.com',
+    'airasia': 'airasia.com'
 }
 
 def analyze_url_logic(url):
@@ -76,7 +167,7 @@ def analyze_url_logic(url):
         logger.error(f"Domain analysis error: {e}")
         return None, None, None
 
-# ---------------- init ----------------
+#เมื่อมี log ใด ๆส่งหน้า uvicorn print ออก console ให้ดู
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("phish-api")
 
